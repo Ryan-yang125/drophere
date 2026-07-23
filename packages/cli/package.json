@@ -1,6 +1,6 @@
 {
   "name": "@drophere/cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Free command-line deployment client for drophere.page",
   "private": true,
   "license": "MIT",
