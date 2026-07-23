@@ -36,14 +36,16 @@ if (!detected.includes("status: ready")) throw new Error("hello-site detector sm
 const scanned = run(process.execPath, [skillScripts[1], example, "--human"]);
 if (!scanned.includes("status: clear")) throw new Error("hello-site scanner smoke did not report clear");
 
+const verifierRequests = [];
 const server = createServer((request, response) => {
+  verifierRequests.push(request.url);
   if (request.url === "/style.css") {
     response.writeHead(200, { "content-type": "text/css" });
     response.end("body { color: #111; }");
     return;
   }
   response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-  response.end("<!doctype html><html><head><link rel=\"stylesheet\" href=\"/style.css\"></head><body><main>DropHere Skill fixture</main></body></html>");
+  response.end("<!doctype html><html><head><link rel=\"stylesheet\" href=\"/style.css\"></head><body><main>DropHere Skill fixture</main><img src=\"vbscript:msgbox(1)\"><img src=\"&amp;quot;/trap&quot;\"></body></html>");
 });
 await new Promise((resolve, reject) => {
   server.once("error", reject);
@@ -60,8 +62,11 @@ try {
     "--retries", "0",
     "--human",
   ]);
-  if (!verified.includes("status: verified") || !verified.includes("assets: 1/1")) {
+  if (!verified.includes("status: verified") || !verified.includes("assets: 2/2")) {
     throw new Error("local URL verifier smoke did not verify homepage and asset");
+  }
+  if (verifierRequests.includes("/%22/trap%22") || !verifierRequests.includes("/&quot;/trap%22")) {
+    throw new Error(`local URL verifier decoded an HTML entity more than once: ${JSON.stringify(verifierRequests)}`);
   }
 } finally {
   await new Promise((resolve) => server.close(resolve));

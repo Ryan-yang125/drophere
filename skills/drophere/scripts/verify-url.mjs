@@ -176,7 +176,13 @@ async function fetchWithRetry(url, origin, options) {
 }
 
 function decodeHtmlAttribute(value) {
-  return value.replaceAll("&amp;", "&").replaceAll("&quot;", '"').replaceAll("&#39;", "'");
+  return value.replace(/&(amp|quot|apos|#39|#x27);/gi, (_match, entity) => {
+    switch (entity.toLowerCase()) {
+      case "amp": return "&";
+      case "quot": return '"';
+      default: return "'";
+    }
+  });
 }
 
 function discoverAssets(html, pageUrl) {
@@ -185,13 +191,14 @@ function discoverAssets(html, pageUrl) {
   let match;
   while ((match = attributePattern.exec(html)) !== null) {
     const raw = decodeHtmlAttribute(match[1].trim());
-    if (!raw || raw.startsWith("data:") || raw.startsWith("blob:") || raw.startsWith("javascript:") || raw.startsWith("#")) continue;
+    if (!raw || raw.startsWith("#")) continue;
     let assetUrl;
     try {
       assetUrl = new URL(raw, pageUrl);
     } catch {
       continue;
     }
+    if (assetUrl.protocol !== "http:" && assetUrl.protocol !== "https:") continue;
     assetUrl.hash = "";
     if (assetUrl.origin !== pageUrl.origin) continue;
     if (assetUrl.pathname === pageUrl.pathname && assetUrl.search === pageUrl.search) continue;
