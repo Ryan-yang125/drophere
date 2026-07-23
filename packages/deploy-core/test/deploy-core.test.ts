@@ -1,6 +1,7 @@
 import JSZip from "jszip";
 import {
   createDeployClient,
+  createChromeStorageAdapter,
   createMemoryStorageAdapter,
   friendlyApiMessage,
   prepareFiles,
@@ -51,8 +52,30 @@ test("rejects uploads without a top level entrypoint", async () => {
 
 test("normalizes domains", () => {
   expect(siteFromDomain("https://demo.drophere.page/")).toBe("demo");
+  expect(siteFromDomain(`HTTPS://demo.drophere.page/${"/".repeat(100_000)}`)).toBe("demo");
   expect(siteFromDomain("demo")).toBe("demo");
   expect(() => siteFromDomain("example.com")).toThrow("drophere.page");
+});
+
+test("sanitizes stored deployment URLs without regex backtracking", async () => {
+  const key = "drophereDropConfig";
+  const area = {
+    async get() {
+      return {
+        [key]: {
+          localDeployments: [
+            { site: "demo", url: `https://demo.drophere.page/${"/".repeat(100_000)}` },
+            { site: "script", url: "vbscript:msgbox(1)" },
+          ],
+        },
+      };
+    },
+    async set() {},
+  };
+
+  const stored = await createChromeStorageAdapter(area, key).read();
+  expect(stored.localDeployments).toHaveLength(1);
+  expect(stored.localDeployments?.[0]).toMatchObject({ site: "demo", domain: "demo.drophere.page" });
 });
 
 test("deploys guest without site and stores anonymous config", async () => {

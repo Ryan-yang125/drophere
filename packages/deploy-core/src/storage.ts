@@ -83,7 +83,8 @@ function sanitizeLocalDeployment(value: unknown): LocalDeploymentRecord | null {
   const site = stringValue(record.site);
   const url = stringValue(record.url);
   if (!site || !url) return null;
-  const domain = stringValue(record.domain) ?? url.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  const domain = stringValue(record.domain) ?? httpDomain(url);
+  if (!domain) return null;
   return {
     id: stringValue(record.id) ?? `${site}-${stringValue(record.createdAt) ?? Date.now().toString(36)}`,
     site,
@@ -100,6 +101,17 @@ function sanitizeLocalDeployment(value: unknown): LocalDeploymentRecord | null {
     claimedAt: stringValue(record.claimedAt),
     ownerEmail: stringValue(record.ownerEmail),
   };
+}
+
+function httpDomain(value: string): string | undefined {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+    if (url.username || url.password || !url.host) return undefined;
+    return url.host;
+  } catch {
+    return undefined;
+  }
 }
 
 function sourceValue(value: unknown): LocalDeploymentSource {

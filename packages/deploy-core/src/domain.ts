@@ -2,11 +2,15 @@ import { BASE_DOMAIN } from "./constants";
 import { DropHereError } from "./types";
 
 export function siteFromDomain(value: string): string {
-  const cleaned = value
-    .trim()
-    .replace(/^https?:\/\//i, "")
-    .replace(/\/.*$/, "")
-    .toLowerCase();
+  const trimmed = value.trim();
+  const lowered = trimmed.toLowerCase();
+  const withoutScheme = lowered.startsWith("https://")
+    ? trimmed.slice("https://".length)
+    : lowered.startsWith("http://")
+      ? trimmed.slice("http://".length)
+      : trimmed;
+  const slashIndex = withoutScheme.indexOf("/");
+  const cleaned = (slashIndex === -1 ? withoutScheme : withoutScheme.slice(0, slashIndex)).toLowerCase();
   const suffix = `.${BASE_DOMAIN}`;
   const site = cleaned.endsWith(suffix) ? cleaned.slice(0, -suffix.length) : cleaned;
   if (site === BASE_DOMAIN || site.includes(".")) {
