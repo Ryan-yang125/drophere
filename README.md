@@ -1,5 +1,7 @@
 # DropHere
 
+[![skills.sh installs](https://skills.sh/b/Ryan-yang125/drophere)](https://skills.sh/Ryan-yang125/drophere/drophere)
+
 DropHere is a free Agent Skill and CLI for publishing a static site from a
 coding-agent session. It detects likely build output, checks the public upload
 for common secrets, deploys it to `drophere.page`, and verifies the resulting
