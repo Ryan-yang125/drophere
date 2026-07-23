@@ -1,0 +1,19 @@
+{
+  "name": "drophere",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "skill:check": "node scripts/check-skill.mjs",
+    "build": "pnpm --filter @drophere/deploy-core run build && pnpm --filter @drophere/cli run build",
+    "test": "pnpm --filter @drophere/deploy-core run test && pnpm --filter @drophere/cli run test",
+    "typecheck": "pnpm --filter @drophere/deploy-core run build && pnpm --filter @drophere/cli run typecheck",
+    "check": "pnpm skill:check && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
+  }
+}

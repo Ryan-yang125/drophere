@@ -1,0 +1,4 @@
+interface:
+  display_name: "DropHere"
+  short_description: "Deploy and verify static sites with DropHere"
+  default_prompt: "Use $drophere to publish this static site with DropHere and return a verified public URL."

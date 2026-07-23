@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/Ryan-yang125/drophere/security/advisories/new
+    about: Report a vulnerability privately.
+  - name: Hosted service
+    url: https://drophere.page/contact
+    about: Get help with an account, quota, abuse report, or live deployment.

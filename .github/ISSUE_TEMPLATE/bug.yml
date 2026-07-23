@@ -1,0 +1,43 @@
+name: Bug report
+description: Report a reproducible problem in the Skill, CLI, or deploy core.
+title: "bug: "
+labels: [bug]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Agent Skill
+        - CLI
+        - Deploy core
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include the smallest safe project or commands that reproduce the problem.
+      placeholder: Commands, expected result, and actual result
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: drophere --version
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: Agent, operating system, Node version, and framework
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, private URLs, and user content from this report.
+          required: true

@@ -1,0 +1,28 @@
+{
+  "name": "@drophere/deploy-core",
+  "version": "1.0.0",
+  "description": "Browser-safe deployment primitives for DropHere clients",
+  "private": true,
+  "license": "MIT",
+  "homepage": "https://drophere.page",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ryan-yang125/drophere.git",
+    "directory": "packages/deploy-core"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
+  }
+}
