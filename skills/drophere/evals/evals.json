@@ -9,9 +9,9 @@
         "Reads package.json and uses pnpm build",
         "Selects dist only after dist/index.html exists",
         "Runs scan-sensitive-files.mjs against the exact dist path",
-        "Runs drophere doctor before drophere guest",
+        "Verifies the bundled CLI digest and runs run-cli.mjs doctor before run-cli.mjs guest",
         "Uses guest deployment without login",
-        "Runs verify-url.mjs against the returned URL",
+        "Runs verify-url.mjs against the returned URL with --dir dist",
         "Returns Status, Provider, URL, Expires, Output, Upload, Verification, Claim, and Warnings in order"
       ],
       "files": []
@@ -60,7 +60,7 @@
       "prompt": "DropHere returned a URL, but the page loads with missing JavaScript files. Finish the deployment check.",
       "expected_output": "Verify the returned DropHere URL and same-origin assets, report degraded or failed with concrete asset paths and counts, inspect the framework base path, and keep the URL in the handoff for inspection.",
       "assertions": [
-        "Runs verify-url.mjs on the returned drophere.page URL",
+        "Runs verify-url.mjs on the returned drophere.page URL with the scanned build directory",
         "Reports failed asset paths without response bodies",
         "Avoids a verified status while assets fail",
         "Suggests correcting the build base path and rebuilding",
@@ -77,6 +77,19 @@
         "Identifies Astro dist output",
         "Performs no drophere guest call",
         "Returns a concise readiness result and the next publish command"
+      ],
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "这个环境里没有全局 drophere 命令。请把当前静态产物发布并验证，避免执行远程安装脚本。",
+      "expected_output": "Use the checksum-verified CLI bundled with the Skill, run doctor and guest through run-cli.mjs, verify the returned URL against the local build directory, and finish without downloading or installing an executable.",
+      "assertions": [
+        "Runs verify-bundled-cli.mjs or relies on run-cli.mjs integrity verification",
+        "Uses run-cli.mjs for doctor and guest",
+        "Downloads no executable and invokes no shell installer",
+        "Runs verify-url.mjs with --dir pointing at the scanned output",
+        "Returns the fixed verified handoff"
       ],
       "files": []
     }

@@ -1,0 +1,2 @@
+bin/drophere.js -text
+bin/drophere.js.sha256 text eol=lf

@@ -6,10 +6,11 @@
   "packageManager": "pnpm@11.7.0",
   "scripts": {
     "skill:check": "node scripts/check-skill.mjs",
+    "skill:bundle-cli": "pnpm --filter @drophere/cli run build && node scripts/sync-skill-cli.mjs",
     "build": "pnpm --filter @drophere/deploy-core run build && pnpm --filter @drophere/cli run build",
     "test": "pnpm --filter @drophere/deploy-core run test && pnpm --filter @drophere/cli run test",
     "typecheck": "pnpm --filter @drophere/deploy-core run build && pnpm --filter @drophere/cli run typecheck",
-    "check": "pnpm skill:check && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm typecheck && pnpm test && pnpm build && pnpm skill:check"
   },
   "devDependencies": {
     "@types/node": "^26.0.1",
