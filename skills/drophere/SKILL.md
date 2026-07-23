@@ -45,19 +45,21 @@ Interpret its result as follows:
 
 The scanner is a best-effort safety layer. Apply the boundary rules in [frameworks.md](references/frameworks.md) even when automated scanning reports `clear`.
 
-### 3. Prepare the official CLI
+### 3. Prepare the bundled official CLI
 
-Require Node.js 18 or newer. Reuse an existing `drophere` command after checking its version. Install the CLI from the official service when it is absent:
+Require Node.js 18 or newer. Use the auditable CLI bundle shipped inside this Skill. Verify its recorded digest before the first use:
 
 ```bash
-curl -fsSL https://drophere.page/install.sh | bash
-drophere --version
+node <skill-directory>/scripts/verify-bundled-cli.mjs
+node <skill-directory>/scripts/run-cli.mjs --version
 ```
+
+The bundle is built from `packages/cli/src` in the same public Git repository and requires no runtime installer or executable download. `run-cli.mjs` repeats the digest check before every CLI action. Stop if the digest check fails.
 
 Run the read-only project and service preflight:
 
 ```bash
-drophere doctor <build-output>
+node <skill-directory>/scripts/run-cli.mjs doctor <build-output>
 ```
 
 Resolve preflight and build failures with [errors.md](references/errors.md).
@@ -67,7 +69,7 @@ Resolve preflight and build failures with [errors.md](references/errors.md).
 Deploy the scanned output directory exactly once:
 
 ```bash
-drophere guest <build-output>
+node <skill-directory>/scripts/run-cli.mjs guest <build-output>
 ```
 
 Capture the public URL, domain, expiry timestamp, file count, and uploaded byte count from the CLI output. Guest deployment is the default. Use an authenticated custom-domain deployment only when the user explicitly requests it.
@@ -77,10 +79,10 @@ Capture the public URL, domain, expiry timestamp, file count, and uploaded byte 
 Run the verifier against the exact URL returned by the CLI:
 
 ```bash
-node <skill-directory>/scripts/verify-url.mjs https://drop-xxxxxxxx.drophere.page
+node <skill-directory>/scripts/verify-url.mjs <returned-https-url> --dir <build-output>
 ```
 
-Add `--route /known-route` for important application routes. The verifier checks the homepage, DropHere response headers, discovered same-origin assets, and requested routes. It retries short propagation failures and never prints response bodies.
+Add `--route /known-route` for important application routes. The verifier derives the asset list from the scanned local `index.html`, then checks the homepage, DropHere response headers, same-origin assets, and requested routes. It treats remote response bodies as opaque bytes, retries short propagation failures, and never prints response bodies.
 
 When browser tooling is available, also open the page once at desktop and mobile width, inspect console errors, and capture a screenshot when the user requested visual proof. Treat script or browser failures as `degraded` or `failed`; preserve the returned URL in the handoff so the user can inspect it.
 
@@ -96,7 +98,7 @@ Expires: <ISO timestamp or unknown>
 Output: <absolute build-output path>
 Upload: <file count and bytes>
 Verification: homepage <status>; assets <passed>/<checked>; routes <passed>/<checked>
-Claim: optional — drophere login --email <email>; drophere claim <domain>
+Claim: optional — use the bundled CLI to log in and claim <domain>
 Warnings: none | <concise unresolved risks>
 ```
 

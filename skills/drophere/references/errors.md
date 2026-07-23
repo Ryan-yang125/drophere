@@ -33,20 +33,20 @@ Use the narrowest recovery matching the observed evidence. Rerun detection and s
 
 - Preserve the exact friendly CLI error and remaining-quota information.
 - Avoid repeated deploy attempts during the same rate-limit window.
-- Offer a later retry. Use the contact shown by `drophere contact` when service help is needed.
+- Offer a later retry. Use the contact shown by `node <skill-directory>/scripts/run-cli.mjs contact` when service help is needed.
 - Keep account login and authenticated deployment as user-directed options.
 
 ## Cloudflare or TLS connectivity is intermittent
 
 - Retry public endpoint checks with short delays.
-- Run `curl -4 --http1.1 -fsS --retry 5 --retry-delay 2 <url>` when local TLS negotiation remains unstable.
+- Run `curl -4 --http1.1 -sS --retry 5 --retry-delay 2 -o /dev/null -w '%{http_code}\n' <url>` when local TLS negotiation remains unstable. Keep response bodies out of Agent context.
 - Treat a successful CLI deployment plus a temporary local curl failure as a verification retry case.
 - Leave VPN and proxy settings unchanged unless the user requests a network change.
 
 ## Homepage verification fails
 
-- Retry with `verify-url.mjs`; its default retry window covers short propagation delays.
-- Confirm the URL came directly from `drophere guest` and ends in `.drophere.page`.
+- Retry with `verify-url.mjs <url> --dir <build-output>`; its default retry window covers short propagation delays.
+- Confirm the URL came directly from the bundled CLI guest command and ends in `.drophere.page`.
 - Check for an expired guest deployment (`410`) or an incorrect entrypoint.
 - Report `failed` while the homepage remains unavailable.
 
@@ -60,7 +60,7 @@ Use the narrowest recovery matching the observed evidence. Rerun detection and s
 
 - Inspect browser console errors and failed network requests.
 - Confirm runtime configuration intended for browsers was embedded during the build.
-- Verify an important SPA route with `verify-url.mjs --route /route`.
+- Verify an important SPA route with `verify-url.mjs <url> --dir <build-output> --route /route`.
 - Report `degraded` when HTTP checks pass and browser execution still fails.
 
 ## A guest site expires

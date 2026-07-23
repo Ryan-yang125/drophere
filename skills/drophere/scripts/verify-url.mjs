@@ -1,16 +1,21 @@
 #!/usr/bin/env node
 
+import { lstat, readFile, realpath } from "node:fs/promises";
+import path from "node:path";
+
 const DEFAULT_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 750;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_ASSETS = 40;
+const MAX_REMOTE_BODY_INSPECTION_BYTES = 8192;
 
 function printHelp() {
   process.stdout.write(`Usage: node verify-url.mjs <drophere-url> [options]
 
-Verify a deployed DropHere homepage, same-origin assets, and optional routes.
+Verify a deployed DropHere homepage, local-build assets, and optional routes.
 
 Options:
+  --dir <path>           Scanned local build output containing index.html
   --route <path>         Verify an important application route; repeatable
   --retries <count>      Retry failed requests (default: 3)
   --retry-delay-ms <ms>  Delay between retries (default: 750)
@@ -43,6 +48,7 @@ function parseInteger(value, option, minimum, maximum) {
 
 function parseArgs(argv) {
   let target;
+  let buildDirectory;
   const routes = [];
   let retries = DEFAULT_RETRIES;
   let retryDelayMs = DEFAULT_RETRY_DELAY_MS;
@@ -65,10 +71,11 @@ function parseArgs(argv) {
       allowLocalhost = true;
       continue;
     }
-    if (["--route", "--retries", "--retry-delay-ms", "--timeout-ms", "--max-assets"].includes(arg)) {
+    if (["--dir", "--route", "--retries", "--retry-delay-ms", "--timeout-ms", "--max-assets"].includes(arg)) {
       const value = argv[index + 1];
       if (value === undefined) fail(`Missing value for ${arg}`);
       index += 1;
+      if (arg === "--dir") buildDirectory = value;
       if (arg === "--route") routes.push(value);
       if (arg === "--retries") retries = parseInteger(value, arg, 0, 10);
       if (arg === "--retry-delay-ms") retryDelayMs = parseInteger(value, arg, 0, 30_000);
@@ -82,7 +89,8 @@ function parseArgs(argv) {
   }
 
   if (!target) fail("A deployed DropHere URL is required");
-  return { target, routes, retries, retryDelayMs, timeoutMs, maxAssets, human, allowLocalhost };
+  if (!buildDirectory) fail("--dir is required and must point to the scanned local build output");
+  return { target, buildDirectory, routes, retries, retryDelayMs, timeoutMs, maxAssets, human, allowLocalhost };
 }
 
 function isLocalHostname(hostname) {
@@ -133,37 +141,47 @@ async function fetchOnce(url, origin, timeoutMs) {
         signal: controller.signal,
         headers: { "user-agent": "DropHere-Skill-Verifier/0.1" },
       });
-    } finally {
+    } catch (error) {
       clearTimeout(timeout);
+      throw error;
     }
 
     if (response.status >= 300 && response.status < 400 && response.headers.has("location")) {
-      const next = new URL(response.headers.get("location"), current);
-      await response.body?.cancel();
+      let next;
+      try {
+        next = new URL(response.headers.get("location"), current);
+      } finally {
+        await response.body?.cancel().catch(() => undefined);
+        clearTimeout(timeout);
+      }
       if (next.origin !== origin) throw new Error("cross-origin-redirect");
       current = next;
       continue;
     }
-    return { response, finalUrl: current };
+    return {
+      response,
+      finalUrl: current,
+      close: () => clearTimeout(timeout),
+    };
   }
   throw new Error("too-many-redirects");
 }
 
 async function fetchWithRetry(url, origin, options) {
-  let lastResponse;
-  let lastFinalUrl = new URL(url);
   let lastError;
 
   for (let attempt = 0; attempt <= options.retries; attempt += 1) {
     try {
       const result = await fetchOnce(url, origin, options.timeoutMs);
-      lastResponse = result.response;
-      lastFinalUrl = result.finalUrl;
-      if (lastResponse.ok) return { ...result, attempts: attempt + 1 };
-      if (lastResponse.status === 410 || attempt === options.retries) {
+      if (result.response.ok) return { ...result, attempts: attempt + 1 };
+      if (result.response.status === 410 || attempt === options.retries) {
         return { ...result, attempts: attempt + 1 };
       }
-      await lastResponse.body?.cancel();
+      try {
+        await result.response.body?.cancel();
+      } finally {
+        result.close();
+      }
     } catch (error) {
       lastError = error;
       if (attempt === options.retries) break;
@@ -171,7 +189,6 @@ async function fetchWithRetry(url, origin, options) {
     await sleep(options.retryDelayMs);
   }
 
-  if (lastResponse) return { response: lastResponse, finalUrl: lastFinalUrl, attempts: options.retries + 1 };
   throw lastError ?? new Error("request-failed");
 }
 
@@ -207,6 +224,86 @@ function discoverAssets(html, pageUrl) {
   return [...assets.values()].sort((left, right) => left.href.localeCompare(right.href));
 }
 
+async function loadLocalBuild(buildDirectory, pageUrl) {
+  const directory = path.resolve(buildDirectory);
+  const directoryInfo = await lstat(directory).catch(() => null);
+  if (!directoryInfo?.isDirectory() || directoryInfo.isSymbolicLink()) {
+    throw new Error("--dir must be a real local directory");
+  }
+
+  const indexPath = path.join(directory, "index.html");
+  const indexInfo = await lstat(indexPath).catch(() => null);
+  if (!indexInfo?.isFile() || indexInfo.isSymbolicLink()) {
+    throw new Error("--dir must contain a regular index.html file");
+  }
+  if (indexInfo.size > 5 * 1024 * 1024) throw new Error("Local index.html exceeds 5 MiB");
+
+  const [realDirectory, realIndex] = await Promise.all([realpath(directory), realpath(indexPath)]);
+  if (path.dirname(realIndex) !== realDirectory) throw new Error("Local index.html escapes --dir");
+
+  const indexBuffer = await readFile(realIndex);
+  const html = indexBuffer.toString("utf8");
+  if (indexBuffer.length < 32 || !/<(?:!doctype\s+html|html|body)\b/i.test(html)) {
+    throw new Error("Local index.html does not look like a complete HTML document");
+  }
+
+  return {
+    directory: realDirectory,
+    indexBytes: indexBuffer.length,
+    assets: discoverAssets(html, pageUrl),
+  };
+}
+
+async function inspectOpaqueBody(response) {
+  const lengthHeader = response.headers.get("content-length");
+  const declaredLength = lengthHeader && /^\d+$/.test(lengthHeader) ? Number(lengthHeader) : null;
+  const inspected = Buffer.alloc(MAX_REMOTE_BODY_INSPECTION_BYTES);
+  let inspectedBytes = 0;
+
+  if (response.body) {
+    const reader = response.body.getReader();
+    try {
+      while (inspectedBytes < MAX_REMOTE_BODY_INSPECTION_BYTES) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        if (!chunk.value?.byteLength) continue;
+        const bytes = Buffer.from(chunk.value.buffer, chunk.value.byteOffset, chunk.value.byteLength);
+        const take = Math.min(bytes.length, MAX_REMOTE_BODY_INSPECTION_BYTES - inspectedBytes);
+        bytes.copy(inspected, inspectedBytes, 0, take);
+        inspectedBytes += take;
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined);
+    }
+  }
+
+  const prefix = inspected.subarray(0, inspectedBytes);
+  return {
+    bytes: Number.isSafeInteger(declaredLength) ? declaredLength : inspectedBytes,
+    inspectedBytes,
+    hasBody: inspectedBytes > 0,
+    looksLikeHtml: ["<!doctype html", "<html", "<body"].some((marker) => includesAsciiCaseInsensitive(prefix, marker)),
+  };
+}
+
+function includesAsciiCaseInsensitive(bytes, text) {
+  const needle = Buffer.from(text, "ascii");
+  if (needle.length > bytes.length) return false;
+  for (let start = 0; start <= bytes.length - needle.length; start += 1) {
+    let matches = true;
+    for (let offset = 0; offset < needle.length; offset += 1) {
+      const candidate = bytes[start + offset];
+      const lowered = candidate >= 65 && candidate <= 90 ? candidate + 32 : candidate;
+      if (lowered !== needle[offset]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return true;
+  }
+  return false;
+}
+
 async function mapWithConcurrency(items, concurrency, mapper) {
   const results = new Array(items.length);
   let next = 0;
@@ -222,8 +319,9 @@ async function mapWithConcurrency(items, concurrency, mapper) {
 }
 
 async function checkResource(url, origin, options) {
+  let result;
   try {
-    const result = await fetchWithRetry(url, origin, options);
+    result = await fetchWithRetry(url, origin, options);
     const outcome = {
       path: safePath(url),
       status: result.response.status,
@@ -234,6 +332,8 @@ async function checkResource(url, origin, options) {
     return outcome;
   } catch {
     return { path: safePath(url), status: null, ok: false, attempts: options.retries + 1, error: "request-failed" };
+  } finally {
+    result?.close();
   }
 }
 
@@ -255,62 +355,68 @@ async function main() {
   targetUrl.hash = "";
   targetUrl.search = "";
   const origin = targetUrl.origin;
+  const localBuild = await loadLocalBuild(options.buildDirectory, targetUrl);
   const warnings = [];
   let homepageResult;
 
   try {
     const fetched = await fetchWithRetry(targetUrl, origin, options);
-    const contentType = fetched.response.headers.get("content-type") ?? "";
-    const bodyBuffer = Buffer.from(await fetched.response.arrayBuffer());
-    const html = bodyBuffer.toString("utf8");
-    const drophereSite = fetched.response.headers.get("x-drophere-site");
-    const deployment = fetched.response.headers.get("x-drophere-deployment");
-    const robots = fetched.response.headers.get("x-robots-tag");
-    const expired = fetched.response.headers.get("x-drophere-expired") === "true";
-    const isHtml = contentType.toLowerCase().includes("text/html");
-    const bodyLooksValid = bodyBuffer.length >= 32 && /<(?:!doctype\s+html|html|body)\b/i.test(html);
-    const providerHeadersPresent = target.local || Boolean(drophereSite && deployment);
+    try {
+      const contentType = fetched.response.headers.get("content-type") ?? "";
+      const opaqueBody = await inspectOpaqueBody(fetched.response);
+      const drophereSite = fetched.response.headers.get("x-drophere-site");
+      const deployment = fetched.response.headers.get("x-drophere-deployment");
+      const robots = fetched.response.headers.get("x-robots-tag");
+      const expired = fetched.response.headers.get("x-drophere-expired") === "true";
+      const isHtml = contentType.toLowerCase().includes("text/html");
+      const providerHeadersPresent = target.local || Boolean(drophereSite && deployment);
 
-    homepageResult = {
-      ok: fetched.response.ok && isHtml && bodyLooksValid && providerHeadersPresent,
-      status: fetched.response.status,
-      contentType,
-      bytes: bodyBuffer.length,
-      attempts: fetched.attempts,
-      drophereSite,
-      deployment,
-      noindex: robots?.toLowerCase().includes("noindex") ?? false,
-      expired,
-      html,
-      finalUrl: fetched.finalUrl,
-    };
+      homepageResult = {
+        ok: fetched.response.ok && isHtml && opaqueBody.hasBody && opaqueBody.looksLikeHtml && providerHeadersPresent,
+        status: fetched.response.status,
+        contentType,
+        bytes: opaqueBody.bytes,
+        inspectedBytes: opaqueBody.inspectedBytes,
+        looksLikeHtml: opaqueBody.looksLikeHtml,
+        attempts: fetched.attempts,
+        drophereSite,
+        deployment,
+        noindex: robots?.toLowerCase().includes("noindex") ?? false,
+        expired,
+        finalUrl: fetched.finalUrl,
+      };
 
-    if (!isHtml) warnings.push("Homepage content type is not text/html.");
-    if (!bodyLooksValid) warnings.push("Homepage body does not look like a complete HTML document.");
-    if (!providerHeadersPresent) warnings.push("DropHere provider headers are missing.");
-    if (!target.local && targetUrl.hostname.startsWith("drop-") && !homepageResult.noindex) {
-      warnings.push("Temporary guest site is missing an expected noindex header.");
+      if (!isHtml) warnings.push("Homepage content type is not text/html.");
+      if (!opaqueBody.hasBody) warnings.push("Homepage response body is empty.");
+      if (opaqueBody.hasBody && !opaqueBody.looksLikeHtml) warnings.push("Homepage response prefix does not look like HTML.");
+      if (!providerHeadersPresent) warnings.push("DropHere provider headers are missing.");
+      if (!target.local && targetUrl.hostname.startsWith("drop-") && !homepageResult.noindex) {
+        warnings.push("Temporary guest site is missing an expected noindex header.");
+      }
+      if (expired) warnings.push("Guest deployment has expired.");
+    } finally {
+      fetched.close();
     }
-    if (expired) warnings.push("Guest deployment has expired.");
   } catch {
     homepageResult = {
       ok: false,
       status: null,
       contentType: "",
       bytes: 0,
+      inspectedBytes: 0,
+      looksLikeHtml: false,
       attempts: options.retries + 1,
       drophereSite: null,
       deployment: null,
       noindex: false,
       expired: false,
-      html: "",
       finalUrl: targetUrl,
     };
     warnings.push("Homepage request failed after retries.");
   }
 
   const discoveredAssets = homepageResult.status && homepageResult.status >= 200 && homepageResult.status < 300
-    ? discoverAssets(homepageResult.html, homepageResult.finalUrl)
+    ? localBuild.assets.map((asset) => new URL(`${asset.pathname}${asset.search}`, homepageResult.finalUrl))
     : [];
   const sampledAssets = discoveredAssets.slice(0, options.maxAssets);
   if (discoveredAssets.length > sampledAssets.length) {
@@ -339,11 +445,17 @@ async function main() {
     status,
     url: targetUrl.href,
     checkedAt: new Date().toISOString(),
+    localBuild: {
+      directory: localBuild.directory,
+      indexBytes: localBuild.indexBytes,
+    },
     homepage: {
       ok: homepageResult.ok,
       status: homepageResult.status,
       contentType: homepageResult.contentType,
       bytes: homepageResult.bytes,
+      inspectedBytes: homepageResult.inspectedBytes,
+      looksLikeHtml: homepageResult.looksLikeHtml,
       attempts: homepageResult.attempts,
       drophereSite: homepageResult.drophereSite,
       deployment: homepageResult.deployment,

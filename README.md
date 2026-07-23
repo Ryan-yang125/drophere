@@ -10,49 +10,45 @@ URL.
 The product name stays **DropHere**. The command is `drophere` and the official
 hosted service is [drophere.page](https://drophere.page).
 
-## Fastest path: guest deploy
+## Fastest path: Agent Skill
 
-Install the CLI:
-
-```bash
-curl -fsSL https://drophere.page/install.sh | bash
-```
-
-Publish a generated static directory:
-
-```bash
-drophere guest ./dist
-```
-
-The command returns a public `https://drop-xxxxxxxx.drophere.page/` URL. Guest
-sites expire after three days. You can create an account later and claim a site
-from the same machine:
-
-```bash
-drophere login --email you@example.com
-drophere claim drop-xxxxxxxx.drophere.page
-```
-
-The interactive password prompt is masked. For agent automation, pipe the
-password through standard input and add `--password-stdin`; keep the value out
-of command arguments and logs.
-
-## Install the Agent Skill
-
-With the Skills CLI:
+Install the Skill:
 
 ```bash
 npx skills add Ryan-yang125/drophere --skill drophere
 ```
-
-For a manual installation, copy `skills/drophere` into your agent's Skill
-directory, such as `~/.agents/skills/drophere`.
 
 Then ask your coding agent:
 
 ```text
 Use the drophere skill to publish this static project and verify the live URL.
 ```
+
+The Skill carries a checksum-verified CLI bundle built from the public source in
+this repository. It detects the build output, scans it, creates a guest deploy,
+and verifies the returned URL without downloading an executable at runtime.
+
+Guest sites expire after three days. You can create an account later and claim
+a site from the same machine with the bundled CLI.
+
+## Standalone CLI
+
+Download `drophere.js` and `drophere.js.sha256` from the
+[latest release](https://github.com/Ryan-yang125/drophere/releases/latest), then
+verify the downloaded file before running it:
+
+```bash
+shasum -a 256 -c drophere.js.sha256
+node ./drophere.js guest ./dist
+```
+
+Linux users can run `sha256sum -c drophere.js.sha256`. The command returns a
+temporary public `*.drophere.page` URL. The interactive password prompt is
+masked. For agent automation, pipe the password through standard input and add
+`--password-stdin`; keep the value out of command arguments and logs.
+
+For a manual installation, copy `skills/drophere` into your agent's Skill
+directory, such as `~/.agents/skills/drophere`.
 
 The Skill defaults to a guest deployment. It asks for account credentials only
 when you explicitly request a permanent, named project.
@@ -68,7 +64,7 @@ private data or unusual generated assets.
 ## Repository layout
 
 ```text
-skills/drophere/       Agent Skill, scripts, references, and evals
+skills/drophere/       Agent Skill, bundled CLI, scripts, references, and evals
 packages/cli/          drophere command-line client
 packages/deploy-core/  browser-safe deployment primitives
 examples/hello-site/   tiny static deployment fixture
