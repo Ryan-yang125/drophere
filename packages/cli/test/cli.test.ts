@@ -152,7 +152,7 @@ test("prints the formal release version", async () => {
 
   await main(["--version"]);
 
-  expect(writes.join("")).toBe("1.0.0\n");
+  expect(writes.join("")).toBe("1.0.1\n");
   stdout.mockRestore();
 });
 
@@ -175,7 +175,7 @@ test("doctor checks service auth and deployable project", async () => {
 
   const output = writes.join("");
   expect(output).toContain("DropHere doctor");
-  expect(output).toContain("version:  1.0.0");
+  expect(output).toContain("version:  1.0.1");
   expect(output).toContain("service:  ok");
   expect(output).toContain("auth:     user user@example.com");
   expect(output).toContain("status:   deployable");

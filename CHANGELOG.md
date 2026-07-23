@@ -4,6 +4,8 @@ All notable public changes to the DropHere Skill and CLI are documented here.
 
 ## Unreleased
 
+## 1.0.1 - 2026-07-24
+
 - Bundled the reproducible DropHere CLI inside the Skill with SHA-256 integrity
   checks before every CLI action.
 - Removed runtime shell installation from the Skill workflow.

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 // src/constants.ts
 import os from "node:os";
 import path from "node:path";
-var VERSION = "1.0.0";
+var VERSION = "1.0.1";
 var DEFAULT_API = "https://api.drophere.page";
 var DEFAULT_BASE_DOMAIN = "drophere.page";
 var USER_CONFIG_PATH = path.join(os.homedir(), ".config", "drophere", "config.json");
