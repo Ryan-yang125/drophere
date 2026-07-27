@@ -1,6 +1,9 @@
 # DropHere
 
 [![skills.sh installs](https://skills.sh/b/Ryan-yang125/drophere)](https://skills.sh/Ryan-yang125/drophere/drophere)
+[![CI](https://github.com/Ryan-yang125/drophere/actions/workflows/ci.yml/badge.svg)](https://github.com/Ryan-yang125/drophere/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/Ryan-yang125/drophere)](https://github.com/Ryan-yang125/drophere/releases/latest)
+[![MIT License](https://img.shields.io/badge/license-MIT-0f766e.svg)](LICENSE)
 
 DropHere is a free Agent Skill and CLI for publishing a static site from a
 coding-agent session. It detects likely build output, checks the public upload
